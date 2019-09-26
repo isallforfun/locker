@@ -52,30 +52,10 @@ RETRY:
 		l.close[path] = make(chan struct{}, 1)
 		l.mutex.Unlock()
 		if ctx.Request.URI().QueryArgs().Has("ttl") {
-			go func(durationInt int) {
-				duration := time.Duration(durationInt) * time.Millisecond
-				select {
-				case <-l.close[path]:
-					break
-				case <-time.After(duration):
-					l.mutex.Lock()
-					l.deleteLock(path)
-					l.mutex.Unlock()
-					break
-				}
-			}(ctx.Request.URI().QueryArgs().GetUintOrZero("ttl"))
+			go l.createTTL(path, ctx)
 
 		} else if ctx.Request.URI().QueryArgs().Has("lock") {
-			connectionClose := make(chan struct{})
-			go func(conn net.Conn) {
-				b := make([]byte, 1)
-				for {
-					if _, v := conn.Read(b); v != nil {
-						connectionClose <- struct{}{}
-						break
-					}
-				}
-			}(ctx.Conn())
+			connectionClose := checkConnectionClose(ctx)
 			select {
 			case <-l.close[path]:
 				ctx.Conn().Close()
@@ -90,8 +70,13 @@ RETRY:
 	} else {
 		l.mutex.Unlock()
 		if ctx.Request.URI().QueryArgs().Has("wait") {
-			<-l.unlock[path]
-			goto RETRY
+			connectionClose := checkConnectionClose(ctx)
+			select {
+			case <-l.unlock[path]:
+				goto RETRY
+			case <-connectionClose:
+				return
+			}
 		}
 	}
 	if has {
@@ -100,6 +85,35 @@ RETRY:
 		ctx.SetStatusCode(200)
 	}
 
+}
+
+func (l *LockHandle) createTTL(path string, ctx *fasthttp.RequestCtx) {
+	func(durationInt int) {
+		duration := time.Duration(durationInt) * time.Millisecond
+		select {
+		case <-l.close[path]:
+			break
+		case <-time.After(duration):
+			l.mutex.Lock()
+			l.deleteLock(path)
+			l.mutex.Unlock()
+			break
+		}
+	}(ctx.Request.URI().QueryArgs().GetUintOrZero("ttl"))
+}
+
+func checkConnectionClose(ctx *fasthttp.RequestCtx) chan struct{} {
+	connectionClose := make(chan struct{})
+	go func(conn net.Conn) {
+		b := make([]byte, 1)
+		for {
+			if _, v := conn.Read(b); v != nil {
+				connectionClose <- struct{}{}
+				break
+			}
+		}
+	}(ctx.Conn())
+	return connectionClose
 }
 
 func (l *LockHandle) getNewHash() string {
