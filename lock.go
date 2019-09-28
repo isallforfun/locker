@@ -10,10 +10,34 @@ import (
 )
 
 type LockHandle struct {
-	locks  map[string]struct{}
-	mutex  *sync.Mutex
-	unlock map[string]chan struct{}
-	close  map[string]chan struct{}
+	locks   map[string]struct{}
+	mutex   *sync.Mutex
+	unlock  map[string]chan struct{}
+	close   map[string]chan struct{}
+	refresh map[string]chan int
+}
+
+func (l *LockHandle) HandleRefresh(ctx *fasthttp.RequestCtx) {
+	path := string(ctx.Request.URI().Path())
+	hasTtl := ctx.Request.URI().QueryArgs().Has("ttl")
+	if !hasTtl {
+		ctx.SetStatusCode(422)
+		return
+	}
+	ttl := ctx.Request.URI().QueryArgs().GetUintOrZero("ttl")
+
+	l.mutex.Lock()
+	_, has := l.locks[path]
+	if has {
+		l.refresh[path] <- ttl
+	}
+	l.mutex.Unlock()
+
+	if has {
+		ctx.SetStatusCode(200)
+	} else {
+		ctx.SetStatusCode(404)
+	}
 }
 
 func (l *LockHandle) HandleDelete(ctx *fasthttp.RequestCtx) {
@@ -73,6 +97,7 @@ RETRY:
 		l.locks[path] = struct{}{}
 		l.unlock[path] = make(chan struct{}, 1)
 		l.close[path] = make(chan struct{}, 1)
+		l.refresh[path] = make(chan int, 1)
 		l.mutex.Unlock()
 		if hasTtl {
 			go l.createTTL(path, ttl)
@@ -110,10 +135,13 @@ func (l *LockHandle) waitConnectionRelease(conn net.Conn, path string) {
 
 func (l *LockHandle) createTTL(path string, ttl int) {
 	func(durationInt int) {
+	REFRESH:
 		duration := time.Duration(durationInt) * time.Millisecond
 		select {
 		case <-l.close[path]:
 			break
+		case durationInt = <-l.refresh[path]:
+			goto REFRESH
 		case <-time.After(duration):
 			l.mutex.Lock()
 			l.deleteLock(path)
@@ -145,9 +173,10 @@ func (l *LockHandle) getNewHash() string {
 
 func NewLockHandle() *LockHandle {
 	return &LockHandle{
-		mutex:  &sync.Mutex{},
-		locks:  make(map[string]struct{}),
-		unlock: make(map[string]chan struct{}),
-		close:  make(map[string]chan struct{}),
+		mutex:   &sync.Mutex{},
+		locks:   make(map[string]struct{}),
+		unlock:  make(map[string]chan struct{}),
+		close:   make(map[string]chan struct{}),
+		refresh: make(map[string]chan int),
 	}
 }

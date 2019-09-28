@@ -12,6 +12,7 @@ func main() {
 	r := router.New()
 	r.GET("/lock/*name", locker.HandleGet)
 	r.DELETE("/lock/*name", locker.HandleDelete)
+	r.PATCH("/lock/*name", locker.HandleRefresh)
 	r.GET("/health", func(ctx *fasthttp.RequestCtx) {})
 	log.Fatal(fasthttp.ListenAndServe(":80", r.Handler))
 }
