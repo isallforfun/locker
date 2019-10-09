@@ -1,26 +1,22 @@
-# Serviços
-
+# Services
 
 ### [GET] /lock/\<ID\>
-Cria um lock para o id informado, retorna `200` caso seja criado com sucesso, ou `409` caso já exista um lock criado com o mesmo id
+Creates a lock for the given id, returns `200` if successfully created, or `409` if a lock with the same id already exists
 
-* `ID` : O identificador pode ser tão simples como um numero, ou tão complexo quando namespace com vários paths, Exemplo : `12345`, `/my/cool/lock-1234`
+* `ID` : The identifier can be as simple as a number, or as complex as multi-path namespace, Example: `12345`, `/my/cool/lock-1234`
 
-* `ttl` : Indica um tempo em milisegundos que o lock ficará ativo, caso não seja informado, o lock ficará ativo até que seja removido, Exemplo : `60`
+* `ttl` : Indicates the time in milliseconds that the lock will be active, if not entered, the lock will be active until it is removed. Example: `60`
 
-* `wait`: Mantem a conexão ativa enquanto o lock estiver ocupado, retornando quando o lock for liberado
+* `wait` : Keeps connection active while lock is busy, returning when lock is released
 
-* `lock`: Mantem o lock enquanto a conexão estiver ativa, assim que a conexão for fechada o lock é liberado
-
+* `lock` : Keep lock while the connection is active, as soon as the connection is closed the lock is released.
 
 ### [DELETE] /lock/\<ID\>
-Libera um lock criado anteriormente, retorna `200` quando o lock é liberado com sucesso e `404` quando o lock não for encontrado
+Releases a previously created lock, returns `200` when the lock is successfully released and `404` when the lock is not found.
 
-* `ID` : O identificador do lock que será liberado, Exemplo : `12345`, `/my/cool/lock-1234`
-
-
+* `ID` : The lock identifier to release, Example: `12345`, `/my/cool/lock-1234`
 ### [PATCH] /lock/\<ID\>[?ttl=\<ttl>]
-Faz alterações a um lock criado anteriormente, retorna `200` quando o lock é alterado com sucesso e `404` quando o lock não for encontrado
+Make changes to a previously created lock, return `200` when the lock is successfully changed and `404` when the lock is not found.
 
-* `ID` : O identificador do lock que será liberado, Exemplo : `12345`, `/my/cool/lock-1234`
-* `ttl`: Altera o tempo de espera até o lock ser liberado para o valor da variável, Exemplo : `5000`
+* `ID` : The lock identifier to release, Example: `12345`, `/my/cool/lock-1234`
+* `ttl`: Changes the timeout until lock is released to the variable value, Example: `5000`
