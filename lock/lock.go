@@ -1,9 +1,8 @@
-package main
+package lock
 
 import (
 	"crypto/rand"
 	"fmt"
-	"github.com/valyala/fasthttp"
 	"net"
 	"sync"
 	"time"
@@ -17,14 +16,29 @@ type LockHandle struct {
 	refresh map[string]chan int
 }
 
-func (l *LockHandle) HandleRefresh(ctx *fasthttp.RequestCtx) {
-	path := string(ctx.Request.URI().Path())
-	hasTtl := ctx.Request.URI().QueryArgs().Has("ttl")
+type RequestContext struct {
+	Path   string
+	HasTTL bool
+	TTL    int
+	Lock   bool
+	Wait   bool
+	Conn   net.Conn
+}
+
+const (
+	ResultUnprocessableEntity = 422
+	ResultSuccess             = 200
+	ResultNotFound            = 404
+	ResultConflict            = 409
+)
+
+func (l *LockHandle) HandleRefresh(ctx *RequestContext) int {
+	path := ctx.Path
+	hasTtl := ctx.HasTTL
 	if !hasTtl {
-		ctx.SetStatusCode(422)
-		return
+		return ResultUnprocessableEntity
 	}
-	ttl := ctx.Request.URI().QueryArgs().GetUintOrZero("ttl")
+	ttl := ctx.TTL
 
 	l.mutex.Lock()
 	_, has := l.locks[path]
@@ -34,19 +48,18 @@ func (l *LockHandle) HandleRefresh(ctx *fasthttp.RequestCtx) {
 	l.mutex.Unlock()
 
 	if has {
-		ctx.SetStatusCode(200)
-	} else {
-		ctx.SetStatusCode(404)
+		return ResultSuccess
 	}
+	return ResultNotFound
 }
 
-func (l *LockHandle) HandleDelete(ctx *fasthttp.RequestCtx) {
-	path := string(ctx.Request.URI().Path())
+func (l *LockHandle) HandleDelete(ctx *RequestContext) int {
+	path := ctx.Path
 	has := l.removeLock(path)
 	if has {
-		ctx.SetStatusCode(200)
+		return ResultSuccess
 	} else {
-		ctx.SetStatusCode(404)
+		return ResultNotFound
 	}
 }
 
@@ -70,23 +83,21 @@ func (l *LockHandle) deleteLock(path string) {
 	delete(l.unlock, path)
 }
 
-func (l *LockHandle) HandleGet(ctx *fasthttp.RequestCtx) {
-	path := string(ctx.Request.URI().Path())
-	hasTtl := ctx.Request.URI().QueryArgs().Has("ttl")
-	ttl := ctx.Request.URI().QueryArgs().GetUintOrZero("ttl")
-	lock := ctx.Request.URI().QueryArgs().Has("lock")
-	wait := ctx.Request.URI().QueryArgs().Has("wait")
-	conn := ctx.Conn()
+func (l *LockHandle) HandleGet(ctx *RequestContext) int {
+	path := ctx.Path
+	hasTtl := ctx.HasTTL
+	ttl := ctx.TTL
+	lock := ctx.Lock
+	wait := ctx.Wait
+	conn := ctx.Conn
 	has, done := l.getLock(path, hasTtl, ttl, lock, conn, wait)
 	if done {
-		return
+		return ResultSuccess
 	}
 	if has {
-		ctx.SetStatusCode(409)
-	} else {
-		ctx.SetStatusCode(200)
+		return ResultConflict
 	}
-
+	return ResultSuccess
 }
 
 func (l *LockHandle) getLock(path string, hasTtl bool, ttl int, lock bool, conn net.Conn, wait bool) (bool, bool) {
