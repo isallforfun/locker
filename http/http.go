@@ -22,8 +22,7 @@ func buildLockerContext(ctx *fasthttp.RequestCtx) *lock.RequestContext {
 	return lockerContext
 }
 
-func Run() {
-	locker := lock.NewLockHandle()
+func Run(locker *lock.LockHandle) {
 	r := router.New()
 	r.GET("/lock/*name", func(ctx *fasthttp.RequestCtx) {
 		ctx.SetStatusCode(locker.HandleRefresh(buildLockerContext(ctx)))

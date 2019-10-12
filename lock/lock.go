@@ -58,9 +58,8 @@ func (l *LockHandle) HandleDelete(ctx *RequestContext) int {
 	has := l.removeLock(path)
 	if has {
 		return ResultSuccess
-	} else {
-		return ResultNotFound
 	}
+	return ResultNotFound
 }
 
 func (l *LockHandle) removeLock(path string) bool {
